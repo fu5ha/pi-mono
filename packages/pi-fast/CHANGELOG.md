@@ -6,6 +6,18 @@ This project follows the spirit of [Keep a Changelog](https://keepachangelog.com
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-02
+
+### Added
+
+- Support GPT-6.1 Sol Fast mode, including cooperating compaction requests.
+- Support the `openai` provider with API keys or ChatGPT OAuth on `openai-responses`, while keeping legacy `openai-codex` support.
+
+### Changed
+
+- Default to `fast` for OpenAI API keys and use `priority` for ChatGPT OAuth and legacy Codex compatibility. Select the tier on each request, including cooperating compaction requests, so authentication changes take effect without another toggle.
+- Clarify API charges, subscription usage, and requested versus delivered service tiers.
+
 ## [0.1.3] - 2026-09-22
 
 ### Fixed

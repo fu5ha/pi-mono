@@ -1,11 +1,15 @@
-export const FAST_SERVICE_TIER = "priority" as const;
+export const FAST_SERVICE_TIER = "fast" as const;
+// Keep the older spelling for ChatGPT OAuth and legacy Codex compatibility.
+export const PRIORITY_SERVICE_TIER = "priority" as const;
 
 export interface FastModel {
   readonly provider: string;
   readonly id: string;
+  readonly api?: string;
 }
 
-const OPENAI_CODEX_FAST_MODELS: ReadonlySet<string> = new Set([
+const OPENAI_FAST_MODELS: ReadonlySet<string> = new Set([
+  "gpt-6.1-sol",
   "gpt-6-astra",
   "gpt-6-sol",
   "gpt-6-luna",
@@ -17,12 +21,17 @@ const OPENAI_CODEX_FAST_MODELS: ReadonlySet<string> = new Set([
 ]);
 
 export function supportsFastMode(model: FastModel | undefined): boolean {
-  return model?.provider === "openai-codex" && OPENAI_CODEX_FAST_MODELS.has(model.id);
+  if (!model || !OPENAI_FAST_MODELS.has(model.id)) return false;
+  return model.provider === "openai-codex" ||
+    (model.provider === "openai" && model.api === "openai-responses");
 }
 
-export function applyFastMode(payload: unknown, model: FastModel | undefined): unknown {
+export function applyFastMode(payload: unknown, model: FastModel | undefined, isUsingOAuth = false): unknown {
   if (!supportsFastMode(model) || !isRecord(payload)) return payload;
-  return { ...payload, service_tier: FAST_SERVICE_TIER };
+  const tier = model?.provider === "openai-codex" || isUsingOAuth
+    ? PRIORITY_SERVICE_TIER
+    : FAST_SERVICE_TIER;
+  return { ...payload, service_tier: tier };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

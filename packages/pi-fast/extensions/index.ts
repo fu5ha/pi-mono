@@ -13,6 +13,11 @@ export default function piFast(pi: ExtensionAPI): void {
 
   let enabled = false;
 
+  function rewritePayload(payload: unknown, ctx: ExtensionContext): unknown {
+    const isUsingOAuth = ctx.model?.provider === "openai" && ctx.modelRegistry.isUsingOAuth(ctx.model);
+    return applyFastMode(payload, ctx.model, isUsingOAuth);
+  }
+
   function updateStatus(ctx: ExtensionContext): void {
     if (ctx.mode !== "tui") return;
 
@@ -38,7 +43,7 @@ export default function piFast(pi: ExtensionAPI): void {
     notify(
       ctx,
       next
-        ? "Fast mode enabled; supported requests use priority processing and increased usage."
+        ? "Fast mode enabled; requests ask for Fast processing, which can increase API charges or subscription usage."
         : "Fast mode disabled.",
       next ? "warning" : "info",
     );
@@ -66,13 +71,13 @@ export default function piFast(pi: ExtensionAPI): void {
 
   pi.on("before_provider_request", (event, ctx) => {
     if (!enabled || !supportsFastMode(ctx.model)) return;
-    return applyFastMode(event.payload, ctx.model);
+    return rewritePayload(event.payload, ctx);
   });
 
   pi.events?.on("pi-codex-compaction:request:v1", (value) => {
     const data = value as { payload: unknown; ctx?: ExtensionContext } | undefined;
     if (!enabled || !data?.ctx || !supportsFastMode(data.ctx.model)) return;
-    data.payload = applyFastMode(data.payload, data.ctx.model);
+    data.payload = rewritePayload(data.payload, data.ctx);
   });
 
   pi.on("session_start", async (_event, ctx) => {
