@@ -282,33 +282,34 @@ for (const id of ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-
       requests.push(requestBody(init));
       return textResponse();
     });
-    const credentials = new InMemoryCredentialStore();
-    const credential = {
-      type: "oauth", access: testToken, refresh: "unused-fixture", expires: Date.now() + 3_600_000,
-    };
-    await credentials.modify("openai", async () => credential);
-    const modelRuntime = await ModelRuntime.create({
-      credentials, modelsPath: null, modelsStorePath: join(agentDir, "models-store.json"),
-    });
-    // The pinned Pi predates /login openai. Supply OAuth through its public provider API
-    // to test the real auth snapshot, extension runner and Responses serializer.
-    const provider = modelRuntime.getProvider("openai");
-    modelRuntime.registerNativeProvider({
-      ...provider,
-      auth: {
-        ...provider.auth,
-        oauth: {
-          name: "ChatGPT fixture",
-          isSubscription: true,
-          login: async () => credential,
-          refresh: async () => credential,
-          toAuth: async () => ({ apiKey: testToken }),
-        },
-      },
-    });
-    await modelRuntime.refresh({ allowNetwork: false });
-    const h = await codexHarness([piFast], { modelRuntime });
+    let h;
     try {
+      const credentials = new InMemoryCredentialStore();
+      const credential = {
+        type: "oauth", access: testToken, refresh: "unused-fixture", expires: Date.now() + 3_600_000,
+      };
+      await credentials.modify("openai", async () => credential);
+      const modelRuntime = await ModelRuntime.create({
+        credentials, modelsPath: null, modelsStorePath: join(agentDir, "models-store.json"),
+      });
+      // The pinned Pi predates /login openai. Supply OAuth through its public provider API
+      // to test the real auth snapshot, extension runner and Responses serializer.
+      const provider = modelRuntime.getProvider("openai");
+      modelRuntime.registerNativeProvider({
+        ...provider,
+        auth: {
+          ...provider.auth,
+          oauth: {
+            name: "ChatGPT fixture",
+            isSubscription: true,
+            login: async () => credential,
+            refresh: async () => credential,
+            toAuth: async () => ({ apiKey: testToken }),
+          },
+        },
+      });
+      await modelRuntime.refresh({ allowNetwork: false });
+      h = await codexHarness([piFast], { modelRuntime });
       await h.session.setModel({ ...modelRuntime.getModel("openai", "gpt-6-astra"), id });
       assert.equal(h.ctx.modelRegistry.isUsingOAuth(h.ctx.model), true);
       await h.session.prompt("Reply OK", { expandPromptTemplates: false });
@@ -341,7 +342,11 @@ for (const id of ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-
       assert.equal(h.session.messages.at(-1).stopReason, "stop");
       assert.deepEqual(h.errors, []);
     } finally {
-      await h.close();
+      try {
+        await h?.close();
+      } finally {
+        t.mock.restoreAll();
+      }
     }
   });
 

@@ -152,6 +152,18 @@ npm test -w packages/pi-fast
 npm run -w packages/pi-fast pack:dry-run
 ```
 
+For repeatable, credential-free coverage against a newer Pi's unmodified
+OpenAI provider, pass its installed package directory (Pi 0.99.1 or later):
+
+```bash
+npm run -w packages/pi-fast smoke:native-openai -- /path/to/node_modules/@earendil-works/pi-coding-agent
+```
+
+This command uses only synthetic in-memory credentials and mocked HTTP. It
+checks subscription/API-key tier selection, toggles, and authentication switches
+without changing the monorepo's pinned dependencies or making live requests.
+It is separate from `test` because the pinned Pi predates native OpenAI OAuth.
+
 Smoke test (Pi 0.99.1 or later): sign in with ChatGPT on `openai`, then
 select `openai/gpt-6.1-sol`, enable `/fast on`, and send a short prompt.
 Check `Fast on`. Repeat with a legacy `openai-codex/gpt-6.1-sol` login,

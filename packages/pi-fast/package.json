@@ -46,6 +46,7 @@
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.mjs",
+    "smoke:native-openai": "node --import tsx tests/native-openai-smoke.mjs",
     "pack:dry-run": "npm pack --dry-run"
   },
   "peerDependencies": {
