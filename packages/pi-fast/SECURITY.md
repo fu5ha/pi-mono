@@ -19,9 +19,9 @@ Report privately through [GitHub Security Advisories](https://github.com/jvm/pi-
 
 `pi-fast` is a Pi package. Pi extensions execute with the same permissions as the local user running Pi. Users should review installed Pi packages and only install packages from sources they trust.
 
-The extension does not read or log prompts, credentials, auth headers, or provider responses. It reads only the `pi-fast.enabledByDefault` value from global Pi settings, inspects the current provider/model identifier, and creates an in-memory request payload copy with `service_tier: "priority"` for supported OpenAI Codex models when Fast mode is enabled.
+The extension does not read or log prompts, credentials, auth headers, or provider responses. It reads only the `pi-fast.enabledByDefault` value from global Pi settings, inspects the current provider/model/API identifiers and Pi's OAuth status, and creates an in-memory request payload copy for supported models when Fast mode is enabled. It uses `service_tier: "fast"` for `openai` API-key access on `openai-responses`, and `service_tier: "priority"` for ChatGPT OAuth or legacy `openai-codex`. It does not resolve credentials, change provider endpoints, cache authentication, or add probe/retry requests to select a tier.
 
-Fast mode is off by default unless `pi-fast.enabledByDefault` is explicitly `true`. Session toggles are not persisted. Models without an advertised Fast tier are not modified. The `priority` tier can increase provider usage, so the setting is an explicit opt-in and the footer and toggle notifications make the active state visible.
+Fast mode is off by default unless `pi-fast.enabledByDefault` is explicitly `true`. Session toggles are not persisted. Models outside the allowlist are not modified. Fast processing can increase API charges or subscription usage, so the setting is an explicit opt-in and the footer and toggle notifications make the requested state visible. The toggle does not guarantee the server delivers Fast processing, and API token-cost estimates do not establish subscription billing.
 
 The same in-memory service-tier transform applies to the
 `pi-codex-compaction:request:v1` event when that package is installed.
