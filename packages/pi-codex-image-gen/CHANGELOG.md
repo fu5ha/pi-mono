@@ -6,6 +6,8 @@ This project follows the spirit of [Keep a Changelog](https://keepachangelog.com
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-10-02
+
 ### Added
 
 - Add package-owned ChatGPT image OAuth through `/login codex-images`, with Pi-managed credential storage and refresh. Keep chat on any provider, including `openai`, without installing Codex or importing Pi's legacy OAuth helpers.
