@@ -128,9 +128,16 @@ test("occupied callback port falls back to a state-checked full redirect URL", a
   });
   t.after(() => new Promise(resolve => server.close(resolve)));
   mockTokenFetch(t);
-  const ui = interaction(async authorize => callback(authorize));
+  const ui = interaction(async (authorize, params) => {
+    assert.match(params.message, /local callback port is unavailable/);
+    assert.match(params.message, /full redirect URL/);
+    return callback(authorize);
+  });
   await imageOAuth.login(ui.value);
   assert.ok(ui.events.some(event => event.type === "info" && /port/.test(event.message)));
+  const auth = ui.events.find(event => event.type === "auth_url");
+  assert.match(auth.instructions, /local callback port is unavailable/);
+  assert.match(auth.instructions, /full redirect URL/);
 });
 
 test("callback validation rejects stale, duplicate, denied, oversized, and untrusted inputs", () => {
@@ -271,7 +278,8 @@ test("login deadline closes the callback and never exchanges a code", async t =>
 
 test("account routing claim cannot inject headers and does not authenticate a JWT locally", () => {
   assert.equal(extractImageAccountId(jwt()), "test-account");
-  for (const value of [jwt("bad\r\nInjected: value"), jwt(""), jwt(null), "not-a-jwt",
+  for (const value of [jwt("bad\r\nInjected: value"), jwt("test-account\n"), jwt("test-account\r"),
+    jwt("test-account\u2028"), `${jwt()}\n`, jwt(""), jwt(null), "not-a-jwt",
     `header.${Buffer.from("null").toString("base64url")}.signature`]) {
     assert.throws(() => extractImageAccountId(value), error =>
       /valid ChatGPT account ID/.test(error.message) && !error.message.includes(value));

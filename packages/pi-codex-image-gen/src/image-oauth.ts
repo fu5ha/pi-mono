@@ -23,12 +23,13 @@ class ImageOAuthDeniedError extends Error {
 export function extractImageAccountId(token: string): string {
 	try {
 		if (typeof token !== "string" || token.length > MAX_TOKEN_RESPONSE_BYTES
-			|| !/^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$/.test(token)) throw new Error();
+			|| /[^a-zA-Z0-9_.-]/.test(token)) throw new Error();
 		const parts = token.split(".");
-		if (parts.length !== 3 || !parts[1]) throw new Error();
+		if (parts.length !== 3 || parts.some(part => !part)) throw new Error();
 		const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
 		const accountId = payload?.[AUTH_CLAIM]?.chatgpt_account_id;
-		if (typeof accountId !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(accountId)) throw new Error();
+		if (typeof accountId !== "string" || accountId.length === 0 || accountId.length > 128
+			|| /[^a-zA-Z0-9_-]/.test(accountId)) throw new Error();
 		// Routing hint only: OpenAI, not this client, authenticates the JWT.
 		return accountId;
 	} catch {
@@ -167,10 +168,13 @@ async function login(interaction: ProviderAuthInteraction): Promise<OAuthCredent
 		}).toString();
 		interaction.notify({
 			type: "auth_url", url: url.href,
-			instructions: "Sign in with ChatGPT for image generation. This is separate from Pi's OpenAI chat login.",
+			instructions: "Sign in with ChatGPT for image generation. This is separate from Pi's OpenAI chat login."
+				+ (callback ? "" : " The local callback port is unavailable. Paste the full redirect URL into Pi to finish login."),
 		});
 		const manual = interaction.prompt({
-			type: "manual_code", message: "Complete image login in your browser, or paste the full redirect URL:",
+			type: "manual_code",
+			message: callback ? "Complete image login in your browser, or paste the full redirect URL:"
+				: "The local callback port is unavailable. Paste the full redirect URL:",
 			placeholder: REDIRECT_URI, signal: AbortSignal.any([deadline, manualAbort.signal]),
 		}).then(input => parseImageOAuthCallback(input, state));
 		const code = await abortable(callback ? Promise.race([callback.code, manual]) : manual, deadline);

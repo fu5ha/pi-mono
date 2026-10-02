@@ -16,6 +16,7 @@ This project follows the spirit of [Keep a Changelog](https://keepachangelog.com
 
 - Keep image authentication separate from the unsupported `openai` plan-sharing image route. Preserve available legacy Pi `openai-codex` credentials as a fallback when package-owned image credentials are absent.
 - Keep OAuth refresh errors private and avoid switching accounts after a selected OAuth failure.
+- Keep manual-login guidance visible when the local callback port is occupied.
 
 ## [0.1.13] - 2026-09-11
 
