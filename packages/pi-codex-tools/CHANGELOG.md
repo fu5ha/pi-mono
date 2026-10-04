@@ -6,6 +6,10 @@ This project follows the spirit of [Keep a Changelog](https://keepachangelog.com
 
 ## [Unreleased]
 
+### Changed
+
+- Update shared Pi development dependencies to 1.0.0.
+
 ## [0.3.0] - 2026-09-18
 
 ### Changed
