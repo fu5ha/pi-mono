@@ -5,10 +5,11 @@ Give grammar-capable OpenAI/Codex models the Codex `apply_patch` tool in Pi with
 ## What it adds
 
 - **Raw `apply_patch`** — sends Codex's Lark grammar as an OpenAI custom tool, so patches are not JSON-wrapped.
+- **Model-only exposure** — `apply_patch` is available directly to the model, never through codemode or other nested tool calls. Requires Pi 0.99.1 or newer.
 - **Capability-based activation** — requires `openai-codex-responses` or `openai-responses` plus `model.compat.supportsOpenAIGrammarTools === true`; model names alone are never enough.
 - **Pi-style filesystem access** — accepts relative or absolute paths and follows symlinked files and directories, including macOS `/tmp`. Uses Node filesystem APIs without a native binding or platform gate.
 - **Validated patches** — limits patches to 1 MiB and target-file reads to 64 MiB, preflights all hunks, and serializes writes with Pi's mutation queue.
-- **Model switching** — supported models replace Pi's `edit` and `write` tools with `apply_patch`; other active tools are preserved. Switching back restores only the file tools that were active before the switch.
+- **Model switching** — supported models use `apply_patch` directly and keep native `edit` and `write` available only through codemode. Switching back restores their normal direct exposure and previous activation state; unrelated active tools are preserved. Keep your usual `defaultTools` selection; no separate exposure extension is needed.
 - **Sequential patch calls** — the extension marks patch execution sequential while leaving provider-side parallel tool calls enabled.
 - **Streaming progress** — while a patch is generated, the TUI shows a live, color-coded glimpse of the content being written (new-file content, or `+`/`-` lines for updates) plus a running `+added -removed` tally and a per-file roster for multi-file patches. It reuses Pi's shared diff rendering and mirrors the built-in `write`/`edit` previews; patch execution is unchanged.
 
@@ -40,6 +41,13 @@ The current Codex source does not define separate `read_file` or `write_file` to
 These choices are based on the Codex tool specifications in `codex-rs/core/src/tools`, the model profiles in `codex-rs/models-manager/models.json`, and the Code Mode protocol. They intentionally keep this package focused on the one tool with a distinct transport and model-facing contract.
 
 ## Compatibility notes
+
+While `apply_patch` is active, this package overrides `edit` and `write` using
+Pi's native tool definitions with `exposure: "codemode"`. These tools remain
+callable even when inactive; activate `codemode` to use them. Switching to an
+unsupported model re-registers the native definitions with direct exposure.
+Custom extensions overriding the same two tool names can conflict with this
+policy. Explicitly activating `edit` or `write` can still declare them directly.
 
 ### GPT-6 Astra
 
@@ -75,7 +83,7 @@ Like native Pi tools, normal path-based I/O does not protect against another pro
 
 These behaviors intentionally match Codex `apply_patch`.
 
-The provider contract is runtime-specific: use Pi 0.83.0 or newer for OpenAI grammar-tool support. For a manual smoke test, start Pi with this extension and a model that advertises `supportsOpenAIGrammarTools`, then ask it to create and update a disposable file through a symlinked directory (on macOS, `/tmp` is suitable). Verify that changes appear as raw `apply_patch` calls, the referent changes, and the symlink remains. Switch to an unsupported model and verify that the original file tools return.
+The provider contract is runtime-specific: use Pi 0.99.1 or newer for model-only tool exposure; development and integration tests use Pi 1.0.x. For a manual smoke test, start Pi with this extension and a model that advertises `supportsOpenAIGrammarTools`, then ask it to create and update a disposable file through a symlinked directory (on macOS, `/tmp` is suitable). Verify that changes appear as raw `apply_patch` calls, the referent changes, and the symlink remains. With `codemode` active, verify that native `edit` and `write` are callable through it but `apply_patch` is not. Switch to an unsupported model and verify that the original file tools return.
 
 ## Development
 

@@ -1,6 +1,7 @@
 import { Container, Text } from "@earendil-works/pi-tui";
 import type { Component } from "@earendil-works/pi-tui";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { createEditToolDefinition, createWriteToolDefinition } from "@earendil-works/pi-coding-agent";
 import { reportInstallTelemetry } from "../src/install-telemetry.js";
 import { applyPatch, APPLY_PATCH_GRAMMAR, MAX_PATCH_BYTES } from "../src/apply-patch.js";
 import { createFreeformInputSchema, createOpenAILarkSampling, type OpenAIGrammarSampling } from "../src/grammar.js";
@@ -38,6 +39,7 @@ export default function piCodexTools(pi: ExtensionAPI): void {
 
   registerGrammarTool({
     name: APPLY_PATCH,
+    exposure: "model-only",
     label: APPLY_PATCH,
     description: "Apply a Codex patch to files. This is a FREEFORM tool: send the patch text directly, never as JSON.",
     promptSnippet: "Apply Codex-format file patches without JSON wrapping",
@@ -115,13 +117,20 @@ export default function piCodexTools(pi: ExtensionAPI): void {
           edit: active.has(EDIT),
           write: active.has(WRITE),
         };
+        // Keep native file tools callable from codemode without declaring them
+        // alongside the model-only grammar tool.
+        pi.registerTool({ ...createEditToolDefinition(ctx.cwd), exposure: "codemode" });
+        pi.registerTool({ ...createWriteToolDefinition(ctx.cwd), exposure: "codemode" });
       }
       for (const tool of REPLACED_TOOLS) active.delete(tool);
       active.add(APPLY_PATCH);
     } else {
       active.delete(APPLY_PATCH);
       if (replacedToolsWasActive) {
+        pi.registerTool({ ...createEditToolDefinition(ctx.cwd), exposure: "direct" });
+        pi.registerTool({ ...createWriteToolDefinition(ctx.cwd), exposure: "direct" });
         for (const tool of REPLACED_TOOLS) {
+          active.delete(tool);
           if (replacedToolsWasActive[tool]) active.add(tool);
         }
       }

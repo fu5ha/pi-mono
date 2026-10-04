@@ -8,6 +8,8 @@ This project follows the spirit of [Keep a Changelog](https://keepachangelog.com
 
 ### Changed
 
+- Register `apply_patch` with model-only exposure, excluding nested calls through codemode.
+- Keep native `edit` and `write` codemode-only while `apply_patch` is active; restore direct exposure and prior activation on unsupported models.
 - Pin shared Pi development dependencies to 1.0.2; host-provided peer dependencies remain unrestricted.
 
 ## [0.3.0] - 2026-09-18

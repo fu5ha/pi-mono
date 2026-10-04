@@ -20,6 +20,9 @@ function makePi(initialActive = ["read", "write", "edit", "bash"]) {
     },
     registerTool(tool) {
       tools.set(tool.name, tool);
+      if ((tool.exposure ?? "direct") === "direct" || tool.exposure === "model-only") {
+        if (!active.includes(tool.name)) active.push(tool.name);
+      }
     },
     getActiveTools() {
       return [...active];
@@ -67,6 +70,8 @@ test("replaces edit and write while preserving unrelated active tools", async ()
 
   await pi.handlers.get("session_start")[0]({}, context);
   assert.deepEqual(pi.getActiveTools(), ["read", "bash", "apply_patch"]);
+  assert.equal(pi.tools.get("edit").exposure, "codemode");
+  assert.equal(pi.tools.get("write").exposure, "codemode");
 
   assert.equal(pi.tools.get("apply_patch").executionMode, "sequential");
   assert.deepEqual(
@@ -76,6 +81,8 @@ test("replaces edit and write while preserving unrelated active tools", async ()
 
   await pi.handlers.get("model_select")[0]({}, { model: ordinaryModel });
   assert.deepEqual(pi.getActiveTools(), ["read", "bash", "edit", "write"]);
+  assert.equal(pi.tools.get("edit").exposure, "direct");
+  assert.equal(pi.tools.get("write").exposure, "direct");
 });
 
 test("rejects apply_patch execution for unsupported models", async () => {
@@ -118,6 +125,48 @@ test("exposes apply_patch as a raw grammar tool", () => {
   piCodexTools(pi);
   const tool = pi.tools.get("apply_patch");
   assert.equal(tool.constrainedSampling.type, "grammar");
+  assert.equal(tool.exposure, "model-only");
   assert.match(tool.constrainedSampling.variants.openai_lark, /start: begin_patch hunk\+ end_patch/);
   assert.match(tool.description, /FREEFORM/);
+});
+
+test("does not override native file tools on an unsupported initial model", async () => {
+  const pi = makePi();
+  piCodexTools(pi);
+  await pi.handlers.get("session_start")[0]({}, { model: ordinaryModel });
+  assert.equal(pi.tools.has("edit"), false);
+  assert.equal(pi.tools.has("write"), false);
+  assert.deepEqual(pi.getActiveTools(), ["read", "write", "edit", "bash"]);
+});
+
+test("real Pi loadout exposes native editing only through nested calls while apply_patch is active", async () => {
+  const { codexHarness } = await import("../../../tests/codex-harness.mjs");
+  const harness = await codexHarness([piCodexTools]);
+  try {
+    const { session, model } = harness;
+    assert.ok(session.getActiveToolNames().includes("apply_patch"));
+    assert.ok(!session.getCallableToolNames().includes("apply_patch"));
+    for (const name of ["edit", "write"]) {
+      assert.ok(!session.getActiveToolNames().includes(name));
+      assert.ok(session.getCallableToolNames().includes(name));
+      assert.equal(session.getToolDefinition(name).exposure, "codemode");
+    }
+    await session.setModel({
+      ...model,
+      id: "fixture-unsupported",
+      compat: { ...model.compat, supportsOpenAIGrammarTools: false },
+    });
+    assert.ok(!session.getActiveToolNames().includes("apply_patch"));
+    for (const name of ["edit", "write"]) {
+      assert.ok(session.getActiveToolNames().includes(name));
+      assert.equal(session.getToolDefinition(name).exposure, "direct");
+    }
+    await session.setModel(model);
+    for (const name of ["edit", "write"]) {
+      assert.ok(!session.getActiveToolNames().includes(name));
+      assert.ok(session.getCallableToolNames().includes(name));
+    }
+  } finally {
+    await harness.close();
+  }
 });
