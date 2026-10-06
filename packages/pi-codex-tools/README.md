@@ -9,7 +9,7 @@ Give grammar-capable OpenAI/Codex models the Codex `apply_patch` tool in Pi with
 - **Capability-based activation** — requires `openai-codex-responses` or `openai-responses` plus `model.compat.supportsOpenAIGrammarTools === true`; model names alone are never enough.
 - **Pi-style filesystem access** — accepts relative or absolute paths and follows symlinked files and directories, including macOS `/tmp`. Uses Node filesystem APIs without a native binding or platform gate.
 - **Validated patches** — limits patches to 1 MiB and target-file reads to 64 MiB, preflights all hunks, and serializes writes with Pi's mutation queue.
-- **Model switching** — supported models use `apply_patch` directly and keep native `edit` and `write` available only through codemode. Switching back restores their normal direct exposure and previous activation state; unrelated active tools are preserved. Keep your usual `defaultTools` selection; no separate exposure extension is needed.
+- **Model switching** — supported models use `apply_patch` directly and keep initially active native `edit` and `write` available through codemode. Switching back restores their normal direct exposure and previous activation state, including later explicit activations. Excluded tools, other extensions' file-tool overrides, and unrelated active tools are preserved. Keep your usual `defaultTools` selection; no separate exposure extension is needed.
 - **Sequential patch calls** — the extension marks patch execution sequential while leaving provider-side parallel tool calls enabled.
 - **Streaming progress** — while a patch is generated, the TUI shows a live, color-coded glimpse of the content being written (new-file content, or `+`/`-` lines for updates) plus a running `+added -removed` tally and a per-file roster for multi-file patches. It reuses Pi's shared diff rendering and mirrors the built-in `write`/`edit` previews; patch execution is unchanged.
 
@@ -42,12 +42,23 @@ These choices are based on the Codex tool specifications in `codex-rs/core/src/t
 
 ## Compatibility notes
 
-While `apply_patch` is active, this package overrides `edit` and `write` using
-Pi's native tool definitions with `exposure: "codemode"`. These tools remain
-callable even when inactive; activate `codemode` to use them. Switching to an
-unsupported model re-registers the native definitions with direct exposure.
-Custom extensions overriding the same two tool names can conflict with this
-policy. Explicitly activating `edit` or `write` can still declare them directly.
+While `apply_patch` is active on Pi 0.99.1 or newer, this package exposes
+initially active native `edit` and `write` with `exposure: "codemode"`. These
+tools remain callable even when inactive; activate `codemode` to use them.
+Tools omitted from `defaultTools` or an explicit `--tools` selection are not
+introduced into codemode. Another extension's `edit` or `write` implementation
+(including approval-protected tools) is left untouched, with its activation and
+exposure unchanged.
+
+Switching to an unsupported model restores only this package's native
+definitions to direct exposure, retaining prior and later explicit activations.
+Explicitly activating `edit` or `write` can still declare them directly, even
+across supported-model switches.
+
+Older Pi runtimes without exposure metadata retain the legacy behavior:
+supported models replace active file tools with `apply_patch`, without
+registering codemode overrides. They do not offer this package's nested native
+editing route; upgrade Pi for that capability.
 
 ### GPT-6 Astra
 

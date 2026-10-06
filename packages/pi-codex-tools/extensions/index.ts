@@ -1,7 +1,8 @@
 import { Container, Text } from "@earendil-works/pi-tui";
 import type { Component } from "@earendil-works/pi-tui";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { createEditToolDefinition, createWriteToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { TSchema } from "typebox";
 import { reportInstallTelemetry } from "../src/install-telemetry.js";
 import { applyPatch, APPLY_PATCH_GRAMMAR, MAX_PATCH_BYTES } from "../src/apply-patch.js";
 import { createFreeformInputSchema, createOpenAILarkSampling, type OpenAIGrammarSampling } from "../src/grammar.js";
@@ -91,7 +92,17 @@ export default function piCodexTools(pi: ExtensionAPI): void {
     },
   });
 
-  let replacedToolsWasActive: Record<ReplacedTool, boolean> | undefined;
+  let replacedTools: Map<ReplacedTool, { wasActive: boolean; parameters?: TSchema; restore?: () => void }> | undefined;
+  const ownedParameters = new Map<ReplacedTool, TSchema>();
+  let ownerPath: string | undefined;
+
+  function exposeNativeTool<TParams extends TSchema, TDetails, TState>(definition: ToolDefinition<TParams, TDetails, TState>) {
+    pi.registerTool({ ...definition, exposure: "codemode" });
+    return {
+      parameters: definition.parameters,
+      restore: () => pi.registerTool({ ...definition, exposure: "direct" }),
+    };
+  }
 
   pi.events?.on("pi-codex-compaction:tools:v1", (value) => {
     const data = value as {
@@ -111,30 +122,51 @@ export default function piCodexTools(pi: ExtensionAPI): void {
     if (typeof pi.getActiveTools !== "function" || typeof pi.setActiveTools !== "function") return;
 
     const active = new Set(pi.getActiveTools());
+    const tools = typeof pi.getAllTools === "function" ? pi.getAllTools() : [];
+    ownerPath ??= tools.find((tool) => tool.name === APPLY_PATCH)?.sourceInfo?.path;
+    const isOwned = (name: ReplacedTool) => {
+      const tool = tools.find((tool) => tool.name === name);
+      return ownerPath !== undefined && tool?.sourceInfo?.path === ownerPath
+        && tool.parameters === ownedParameters.get(name);
+    };
     if (supportsOpenAIGrammarTools(ctx.model)) {
-      if (replacedToolsWasActive === undefined) {
-        replacedToolsWasActive = {
-          edit: active.has(EDIT),
-          write: active.has(WRITE),
-        };
-        // Keep native file tools callable from codemode without declaring them
-        // alongside the model-only grammar tool.
-        pi.registerTool({ ...createEditToolDefinition(ctx.cwd), exposure: "codemode" });
-        pi.registerTool({ ...createWriteToolDefinition(ctx.cwd), exposure: "codemode" });
+      if (replacedTools === undefined) {
+        replacedTools = new Map();
+        // Older runtimes omit exposure metadata and cannot offer nested editing.
+        const supportsExposure = tools.some((tool) => tool.name === APPLY_PATCH && tool.exposure === "model-only");
+        for (const name of REPLACED_TOOLS) {
+          const wasActive = active.has(name);
+          if (supportsExposure) {
+            const tool = tools.find((tool) => tool.name === name);
+            // Never introduce excluded tools or replace another extension's
+            // implementation (which may enforce file-write approval).
+            if (!wasActive || (tool?.sourceInfo?.path !== `builtin:${name}` && !isOwned(name))) continue;
+            const owned = name === EDIT
+              ? exposeNativeTool(createEditToolDefinition(ctx.cwd))
+              : exposeNativeTool(createWriteToolDefinition(ctx.cwd));
+            replacedTools.set(name, { wasActive, ...owned });
+            ownedParameters.set(name, owned.parameters);
+          } else {
+            // Preserve the pre-codemode loadout policy without overriding tools.
+            replacedTools.set(name, { wasActive });
+          }
+          active.delete(name);
+        }
       }
-      for (const tool of REPLACED_TOOLS) active.delete(tool);
       active.add(APPLY_PATCH);
     } else {
       active.delete(APPLY_PATCH);
-      if (replacedToolsWasActive) {
-        pi.registerTool({ ...createEditToolDefinition(ctx.cwd), exposure: "direct" });
-        pi.registerTool({ ...createWriteToolDefinition(ctx.cwd), exposure: "direct" });
-        for (const tool of REPLACED_TOOLS) {
-          active.delete(tool);
-          if (replacedToolsWasActive[tool]) active.add(tool);
+      if (replacedTools) {
+        for (const [name, { wasActive, parameters, restore }] of replacedTools) {
+          // Only restore definitions we still own. Registration activates direct
+          // tools; the final loadout below uses the pre-registration active set.
+          if (restore && isOwned(name) && tools.find((tool) => tool.name === name)?.parameters === parameters) {
+            restore();
+          }
+          if (wasActive) active.add(name);
         }
       }
-      replacedToolsWasActive = undefined;
+      replacedTools = undefined;
     }
     pi.setActiveTools([...active]);
   }
