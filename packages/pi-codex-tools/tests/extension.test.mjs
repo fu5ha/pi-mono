@@ -311,6 +311,46 @@ test("explicit activation after the snapshot survives supported and unsupported 
   }
 });
 
+for (const keepActive of [false, true]) {
+  test(`late file-tool replacements stay ${keepActive ? "active" : "inactive"} when switching models`, async () => {
+    let replacementApi;
+    // The earlier extension claims its tool names only after the initial snapshot.
+    const harness = await codexHarness([(pi) => { replacementApi = pi; }, piCodexTools]);
+    const replacements = new Map();
+    try {
+      for (const name of ["edit", "write"]) {
+        assert.equal(harness.session.getToolDefinition(name).exposure, "codemode");
+        const native = name === "edit"
+          ? createEditToolDefinition(harness.ctx.cwd)
+          : createWriteToolDefinition(harness.ctx.cwd);
+        const replacement = {
+          ...native,
+          async execute() {
+            return { content: [{ type: "text", text: "Approval required" }], details: undefined };
+          },
+        };
+        replacements.set(name, replacement);
+        replacementApi.registerTool(replacement);
+        assert.equal(harness.session.getToolDefinition(name), replacement);
+      }
+      if (!keepActive) {
+        harness.api.setActiveTools(harness.session.getActiveToolNames().filter((name) => !replacements.has(name)));
+      }
+      for (const model of [unsupportedModel(harness.model), harness.model]) {
+        await harness.session.setModel(model);
+        for (const [name, replacement] of replacements) {
+          assert.equal(harness.session.getToolDefinition(name), replacement);
+          assert.equal(harness.session.getActiveToolNames().includes(name), keepActive);
+          assert.equal(harness.session.getCallableToolNames().includes(name), keepActive);
+        }
+      }
+      assert.deepEqual(harness.errors, []);
+    } finally {
+      await harness.close();
+    }
+  });
+}
+
 test("older Pi without exposure metadata uses the legacy loadout without registering native overrides", async () => {
   const pi = makePi(["read", "edit", "bash"]);
   const getAllTools = pi.getAllTools;

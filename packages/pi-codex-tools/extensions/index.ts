@@ -162,8 +162,12 @@ export default function piCodexTools(pi: ExtensionAPI): void {
           // tools; the final loadout below uses the pre-registration active set.
           if (restore && isOwned(name) && tools.find((tool) => tool.name === name)?.parameters === parameters) {
             restore();
+            if (wasActive) active.add(name);
+          } else if (!restore && wasActive) {
+            // Legacy snapshots have no definition to restore. If a modern
+            // definition changed owners, retain its current activation instead.
+            active.add(name);
           }
-          if (wasActive) active.add(name);
         }
       }
       replacedTools = undefined;
