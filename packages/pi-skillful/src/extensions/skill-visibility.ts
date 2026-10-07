@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import {
   DynamicBorder,
   getSettingsListTheme,
@@ -24,15 +25,19 @@ import { isTopLevelSkill, listLoadedSkills, type LoadedSkillInfo } from "../skil
 import { hasActiveSessionSkillToggles, refreshSessionSkillToggles } from "./session-skill-toggles.js";
 const SCOPES: SkillfulScope[] = ["global", "project"];
 const STORE_KEY = Symbol.for("pi-skillful.skillVisibilityStore");
-const STARTUP_PATCH_KEY = Symbol.for("pi-skillful.startupPatchV3");
+// Install the new component contract even after reloading a V3-patched process.
+const STARTUP_PATCH_KEY = Symbol.for("pi-skillful.startupPatchV4");
 
 interface SkillVisibilityStore {
   hiddenSkillsByCwd: Map<string, Set<string>>;
   theme: Theme | null;
+  getTheme?: () => Theme;
 }
 
 interface ExpandableTextLike {
-  getCollapsedText: () => string;
+  getCollapsedText?: () => string;
+  build?: () => string;
+  invalidate?: () => void;
   setText: (text: string) => void;
 }
 
@@ -43,6 +48,7 @@ interface BoxLike {
 interface InteractiveModeLike {
   loadedResourcesContainer?: BoxLike;
   showLoadedResources?: (options?: unknown) => void;
+  getStartupExpansionState?: () => boolean;
   session?: { resourceLoader?: { getSkills: () => { skills: Skill[]; diagnostics: unknown[] } } };
   sessionManager?: { getCwd?: () => string };
 }
@@ -84,6 +90,7 @@ export default function skillVisibility(pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     store.theme = ctx.ui.theme;
+    store.getTheme = () => ctx.ui.theme;
     await refreshHiddenSkillCache(ctx.cwd, ctx.isProjectTrusted());
   });
 
@@ -184,7 +191,6 @@ export function installStartupSkillListPatch(
       return result;
     };
 
-    const childrenBefore = this.loadedResourcesContainer?.children.length ?? 0;
     try {
       original.call(this, options);
     } finally {
@@ -193,16 +199,36 @@ export function installStartupSkillListPatch(
 
     if (rawSkillNames.length === 0 || !cwd || !this.loadedResourcesContainer) return;
 
-    const hidden = store.hiddenSkillsByCwd.get(cwd) ?? new Set<string>();
-    const children = this.loadedResourcesContainer.children;
-    for (let index = childrenBefore; index < children.length; index++) {
-      const child = children[index] as ExpandableTextLike | undefined;
+    const colorized = () => buildColorizedSkillList(
+      rawSkillNames,
+      store.hiddenSkillsByCwd.get(cwd) ?? new Set<string>(),
+      store.getTheme?.() ?? store.theme,
+    );
+    const collapsedText = buildColorizedSkillList(rawSkillNames, new Set(), null);
+    // Pi clears and rebuilds this container, including during /reload.
+    for (const entry of this.loadedResourcesContainer.children) {
+      const child = entry as ExpandableTextLike | undefined;
+      if (child && typeof child.build === "function") {
+        // Pi 1.x closes over expansion state in ThemedText.build instead of
+        // exposing getCollapsedText. Decorate only the compact skill list;
+        // leave expanded paths and other sections to Pi. Rebuild colors on
+        // invalidation so theme changes never retain captured ANSI strings.
+        const build = child.build;
+        if (!stripVTControlCharacters(build.call(child)).startsWith("[Skills]\n")) continue;
+        child.build = () => {
+          const text = build.call(child);
+          return stripVTControlCharacters(text) === collapsedText ? colorized() : text;
+        };
+        child.invalidate?.();
+        break;
+      }
       if (!child || typeof child.getCollapsedText !== "function") continue;
       if (!child.getCollapsedText().includes("[Skills]")) continue;
 
-      const colorized = buildColorizedSkillList(rawSkillNames, hidden, store.theme);
-      child.getCollapsedText = () => colorized;
-      child.setText(colorized);
+      // Retain the older Pi component contract without collapsing an
+      // initially expanded resource listing.
+      child.getCollapsedText = colorized;
+      if (!this.getStartupExpansionState?.()) child.setText(colorized());
       break;
     }
   };

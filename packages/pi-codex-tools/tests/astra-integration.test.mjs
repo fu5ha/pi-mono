@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, symlink, lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import { OPENAI_MODELS } from "@earendil-works/pi-ai/providers/openai.models";
 import { OPENAI_CODEX_MODELS } from "@earendil-works/pi-ai/providers/openai-codex.models";
 import { stream as streamResponses } from "@earendil-works/pi-ai/api/openai-responses";
@@ -76,7 +77,7 @@ for (const [catalog, stream, apiKey] of [
         },
       };
       const messages = [{ role: "user", content: "Create the fixture", timestamp: Date.now() }];
-      const response = await stream(model, { messages, tools: [tool] }, options).result();
+      const response = await stream(model, normalizeContext({ messages, tools: [tool] }), options).result();
       assert.equal(response.stopReason, "toolUse", response.errorMessage);
       const call = response.content.find((block) => block.type === "toolCall");
       assert.deepEqual(call.arguments, { patch });
@@ -87,7 +88,7 @@ for (const [catalog, stream, apiKey] of [
         role: "toolResult", toolCallId: call.id, toolName: call.name,
         content: result.content, isError: false, timestamp: Date.now(),
       });
-      const replay = await stream(model, { messages, tools: [tool] }, options).result();
+      const replay = await stream(model, normalizeContext({ messages, tools: [tool] }), options).result();
       assert.equal(replay.stopReason, "toolUse", replay.errorMessage);
       assert.equal(requestCount, 2);
     } finally {
