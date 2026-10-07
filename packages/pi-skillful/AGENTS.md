@@ -19,3 +19,5 @@ npm run -w packages/pi-skillful pack:dry-run
 ```
 
 Smoke test `/skillful`, startup colors, hidden invocation, inline invocation, and configured shortcuts after UI changes.
+
+For startup-renderer changes, use a disposable Pi profile with one hidden and one visible skill. Check the collapsed `[Skills]` colors in regular and fullscreen modes, expand/collapse the resource list, change themes, and run `/reload`. Expanded paths must remain native; collapsed colors must follow the current theme and settings without duplicating sections.

@@ -12,6 +12,7 @@ This project follows the spirit of [Keep a Changelog](https://keepachangelog.com
 
 ### Fixed
 
+- Restore hidden-skill startup colors on Pi 1.x while preserving theme changes, expanded resource paths, and reloads.
 - Let `enableInstallTelemetry: false` override an enabled `PI_TELEMETRY` environment flag.
 
 ## [0.4.0] - 2026-07-28

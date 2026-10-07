@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { formatSkillsForPrompt, initTheme } from "@earendil-works/pi-coding-agent";
+import { formatSkillsForPrompt, initTheme, InteractiveMode } from "@earendil-works/pi-coding-agent";
+import { Container, stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 
 const home = await mkdtemp(join(tmpdir(), "pi-skillful-visibility-test-"));
 process.env.HOME = home;
@@ -154,7 +155,7 @@ test("untrusted projects expose only global settings in the menu", async () => {
   assert.deepEqual(JSON.parse(await readFile(projectPath, "utf-8")), projectSettings);
 });
 
-test("startup patch colors the built-in skill list from effective settings", async () => {
+test("startup patch retains support for the legacy resource component", async () => {
   const cwd = await mkdtemp(join(home, "startup-colors-"));
   await writeSettings(globalSettingsPath, { skillful: { hiddenSkills: ["hidden"] } });
 
@@ -168,6 +169,7 @@ test("startup patch colors the built-in skill list from effective settings", asy
   );
 
   const prototype = {
+    [Symbol.for("pi-skillful.startupPatchV3")]: true,
     showLoadedResources() {
       const { skills } = this.session.resourceLoader.getSkills();
       const names = skills.map(({ name }) => name).sort().join(", ");
@@ -198,6 +200,107 @@ test("startup patch colors the built-in skill list from effective settings", asy
     "<mdHeading>[Skills]</mdHeading>\n  <error>hidden</error>, <dim>visible</dim>",
   );
   assert.equal(rendered.getCollapsedText(), rendered.text);
+});
+
+test("real Pi startup renderer preserves colors through themes, expansion, and reload", async () => {
+  const cwd = await mkdtemp(join(home, "real-startup-"));
+  await writeSettings(globalSettingsPath, { skillful: { hiddenSkills: ["hidden"] } });
+  let { handlers } = registerVisibility();
+  let palette = "first";
+  const ctx = {
+    cwd,
+    mode: "tui",
+    isProjectTrusted: () => false,
+    ui: {
+      get theme() {
+        const name = palette;
+        return { fg: (color, text) => `<${name}:${color}>${text}</${name}:${color}>` };
+      },
+    },
+  };
+  await handlers.get("session_start")({ reason: "startup" }, ctx);
+
+  const skills = [skill("visible"), skill("hidden")];
+  const getSkills = () => ({ skills, diagnostics: [] });
+  let expanded = false;
+  const instance = {
+    loadedResourcesContainer: new Container(),
+    sessionManager: { getCwd: () => cwd },
+    session: {
+      promptTemplates: [],
+      resourceLoader: {
+        getSkills,
+        getPrompts: () => ({ prompts: [], diagnostics: [] }),
+        getThemes: () => ({ themes: [], diagnostics: [] }),
+        getExtensions: () => ({ extensions: [], errors: [], warnings: [] }),
+        getSystemPromptSource: () => undefined,
+        getAppendSystemPromptSources: () => [],
+        getAgentsFiles: () => ({ agentsFiles: [{ path: join(cwd, "AGENTS.md") }] }),
+      },
+      extensionRunner: {
+        getCommandDiagnostics: () => [],
+        getShortcutDiagnostics: () => [],
+      },
+    },
+    getStartupExpansionState: () => expanded,
+    shouldShowStartupDetails: () => false,
+    buildScopeGroups: () => [],
+    formatScopeGroups: () => "  native expanded skill paths",
+    formatDisplayPath: (path) => path,
+    formatContextPath: () => "AGENTS.md",
+    getBuiltInCommandConflictDiagnostics: () => [],
+  };
+  const showResources = () => {
+    // Exercise the installed Pi renderer and the extension's factory wiring,
+    // not a mock of the private component contract.
+    InteractiveMode.prototype.showLoadedResources.call(instance, { force: true });
+    assert.equal(instance.session.resourceLoader.getSkills, getSkills);
+  };
+  const render = () => instance.loadedResourcesContainer.render(200).join("\n");
+  const skillsSection = () => instance.loadedResourcesContainer.children.find(
+    (child) => stripTerminalSequences(child.render(200).join("\n")).includes("[Skills]"),
+  );
+
+  showResources();
+  assert.ok(render().includes("<first:error>hidden</first:error>"));
+  assert.ok(render().includes("<first:dim>visible</first:dim>"));
+  assert.ok(stripTerminalSequences(render()).includes("[Context]"));
+  assert.ok(stripTerminalSequences(render()).includes("AGENTS.md"));
+
+  palette = "second";
+  instance.loadedResourcesContainer.invalidate();
+  assert.ok(render().includes("<second:error>hidden</second:error>"));
+  assert.ok(!render().includes("<first:"));
+  for (const line of instance.loadedResourcesContainer.render(40)) {
+    assert.ok(visibleWidth(line) <= 40);
+  }
+
+  skillsSection().setExpanded(true);
+  assert.ok(render().includes("native expanded skill paths"));
+  assert.ok(!render().includes("<second:error>"));
+  skillsSection().setExpanded(false);
+  assert.ok(render().includes("<second:error>hidden</second:error>"));
+
+  // A reload clears and rebuilds the populated container. It must not stack
+  // prototype wrappers or skip replacement children based on the old length.
+  const patched = InteractiveMode.prototype.showLoadedResources;
+  ({ handlers } = registerVisibility());
+  assert.equal(InteractiveMode.prototype.showLoadedResources, patched);
+  await writeSettings(globalSettingsPath, { skillful: { hiddenSkills: ["visible"] } });
+  await handlers.get("session_start")({ reason: "reload" }, ctx);
+  showResources();
+  assert.ok(render().includes("<second:error>visible</second:error>"));
+  assert.ok(render().includes("<second:dim>hidden</second:dim>"));
+
+  expanded = true;
+  showResources();
+  assert.ok(render().includes("native expanded skill paths"));
+  assert.ok(!render().includes("<second:error>"));
+  skillsSection().setExpanded(false);
+  assert.ok(render().includes("<second:error>visible</second:error>"));
+
+  InteractiveMode.prototype.showLoadedResources.call(instance, { force: false });
+  assert.equal(instance.loadedResourcesContainer.children.length, 0);
 });
 
 test.after(async () => {
