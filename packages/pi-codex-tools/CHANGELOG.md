@@ -9,9 +9,9 @@ This project follows the spirit of [Keep a Changelog](https://keepachangelog.com
 ### Changed
 
 - Register `apply_patch` with model-only exposure, excluding nested calls through codemode.
-- Keep initially active native `edit` and `write` codemode-only while `apply_patch` is active; restore direct exposure and retain prior and explicit later activations on unsupported models.
-- Preserve excluded file tools and other extensions' approval-protected overrides; fall back to the legacy loadout policy on Pi runtimes without exposure metadata.
-- Preserve the current activation of file tools replaced by another extension after startup instead of replaying this package's saved activation.
+- Hide selected native `edit` and `write` declarations through Pi's public loadout hook while keeping their implementations, activation, and exposure intact for nested calls.
+- Preserve tool selection across reloads and model switches, including explicit activation and deactivation. Excluded tools remain excluded; older Pi runtimes retain the legacy selection policy.
+- Preserve approval wrappers regardless of extension load order or registration time, and leave native file tools intact when another extension overrides `apply_patch`.
 - Pin shared Pi development dependencies to 1.0.2; host-provided peer dependencies remain unrestricted.
 
 ## [0.3.0] - 2026-09-18
