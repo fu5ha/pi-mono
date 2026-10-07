@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import test from "node:test";
 import { formatSkillsForPrompt, initTheme, InteractiveMode } from "@earendil-works/pi-coding-agent";
-import { Container, stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
+import { Container, visibleWidth } from "@earendil-works/pi-tui";
 
 const home = await mkdtemp(join(tmpdir(), "pi-skillful-visibility-test-"));
 process.env.HOME = home;
@@ -258,14 +259,14 @@ test("real Pi startup renderer preserves colors through themes, expansion, and r
   };
   const render = () => instance.loadedResourcesContainer.render(200).join("\n");
   const skillsSection = () => instance.loadedResourcesContainer.children.find(
-    (child) => stripTerminalSequences(child.render(200).join("\n")).includes("[Skills]"),
+    (child) => stripVTControlCharacters(child.render(200).join("\n")).includes("[Skills]"),
   );
 
   showResources();
   assert.ok(render().includes("<first:error>hidden</first:error>"));
   assert.ok(render().includes("<first:dim>visible</first:dim>"));
-  assert.ok(stripTerminalSequences(render()).includes("[Context]"));
-  assert.ok(stripTerminalSequences(render()).includes("AGENTS.md"));
+  assert.ok(stripVTControlCharacters(render()).includes("[Context]"));
+  assert.ok(stripVTControlCharacters(render()).includes("AGENTS.md"));
 
   palette = "second";
   instance.loadedResourcesContainer.invalidate();

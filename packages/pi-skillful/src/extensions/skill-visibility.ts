@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import {
   DynamicBorder,
   getSettingsListTheme,
@@ -6,7 +7,7 @@ import {
   type Skill,
   type Theme,
 } from "@earendil-works/pi-coding-agent";
-import { type Component, Key, matchesKey, type SettingItem, SettingsList, stripTerminalSequences, truncateToWidth, type TUI } from "@earendil-works/pi-tui";
+import { type Component, Key, matchesKey, type SettingItem, SettingsList, truncateToWidth, type TUI } from "@earendil-works/pi-tui";
 import {
   normalizeSkillName,
   normalizeSkillNames,
@@ -213,10 +214,10 @@ export function installStartupSkillListPatch(
         // leave expanded paths and other sections to Pi. Rebuild colors on
         // invalidation so theme changes never retain captured ANSI strings.
         const build = child.build;
-        if (!stripTerminalSequences(build.call(child)).startsWith("[Skills]\n")) continue;
+        if (!stripVTControlCharacters(build.call(child)).startsWith("[Skills]\n")) continue;
         child.build = () => {
           const text = build.call(child);
-          return stripTerminalSequences(text) === collapsedText ? colorized() : text;
+          return stripVTControlCharacters(text) === collapsedText ? colorized() : text;
         };
         child.invalidate?.();
         break;
