@@ -109,7 +109,7 @@ export default function piCodexTools(pi: ExtensionAPI): void {
     },
   });
 
-  let legacyReplacedTools: FileTool[] | undefined;
+  let legacyReplacedTools: Set<FileTool> | undefined;
 
   pi.events?.on("pi-codex-compaction:tools:v1", (value) => {
     const data = value as {
@@ -134,10 +134,14 @@ export default function piCodexTools(pi: ExtensionAPI): void {
     // support or this extension's ownership from an overridable apply_patch tool.
     const supportsLoadout = tools.some((tool) => tool.exposure !== undefined);
     if (supportsOpenAIGrammarTools(ctx.model)) {
-      if (!supportsLoadout && legacyReplacedTools === undefined) {
+      if (!supportsLoadout) {
         // Older runtimes cannot hide declarations independently of activation.
-        legacyReplacedTools = FILE_TOOLS.filter((name) => active.has(name));
-        for (const name of legacyReplacedTools) active.delete(name);
+        // Re-hide later activations on every supported-model switch, retaining
+        // them for restoration when leaving the supported models.
+        legacyReplacedTools ??= new Set();
+        for (const name of FILE_TOOLS) {
+          if (active.delete(name)) legacyReplacedTools.add(name);
+        }
       }
       active.add(APPLY_PATCH);
     } else {

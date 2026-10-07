@@ -386,6 +386,22 @@ test("older Pi without exposure metadata uses the legacy loadout without registe
   for (const name of ["edit", "write"]) assert.ok(!pi.tools.has(name));
 });
 
+test("legacy model switches hide reactivated file tools and retain them for restoration", async () => {
+  const pi = makePi(["read", "edit", "bash"]);
+  const getAllTools = pi.getAllTools;
+  pi.getAllTools = () => getAllTools().map(({ exposure, sourceInfo, ...tool }) => tool);
+  piCodexTools(pi);
+  await pi.handlers.get("session_start")[0]({}, { model: codexModel });
+  for (const id of ["another-supported-model", codexModel.id]) {
+    pi.setActiveTools([...pi.getActiveTools(), "edit", "write"]);
+    await pi.handlers.get("model_select")[0]({}, { model: { ...codexModel, id } });
+    assert.deepEqual(pi.getActiveTools(), ["read", "bash", "apply_patch"]);
+  }
+  await pi.handlers.get("model_select")[0]({}, { model: ordinaryModel });
+  assert.deepEqual(pi.getActiveTools(), ["read", "bash", "edit", "write"]);
+  for (const name of ["edit", "write"]) assert.ok(!pi.tools.has(name));
+});
+
 test("explicit deactivation survives reload and model switches", async (t) => {
   const harness = await codexHarness([piCodexTools]);
   try {
