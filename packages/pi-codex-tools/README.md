@@ -66,7 +66,12 @@ package's loadout hook does not apply to that replacement.
 Older Pi runtimes without exposure metadata retain the legacy behavior:
 supported models replace active file tools with `apply_patch`, without
 registering codemode overrides. They do not offer this package's nested native
-editing route; upgrade Pi for that capability.
+editing route; upgrade Pi for that capability. The fallback restores its saved
+file-tool selection when leaving supported models. Older Pi cannot distinguish
+an explicit deactivation of an already-hidden tool from leaving it unchanged.
+To disable such a tool, switch to an unsupported model before changing the
+selection, or upgrade Pi to preserve explicit deactivation while `apply_patch`
+is active.
 
 ### GPT-6 Astra
 
